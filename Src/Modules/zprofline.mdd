@@ -1,0 +1,7 @@
+name=zsh/zprofline
+link=dynamic
+load=no
+
+autofeatures="b:zprofline"
+
+objects="zprofline.o"

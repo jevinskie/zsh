@@ -1,3 +1,4 @@
+#pragma once
 #undef NDEBUG
 #include <assert.h>
 
@@ -29,10 +30,6 @@ static inline void kConsedCstrPolicy_copy(void *dst, const void *src) {
     assert(src_len_w_nul != 0);
     assert(src_cstr);
 
-    uintptr_t scc_u      = (uintptr_t)*sccp;
-    uintptr_t scc_next_u = scc_u + sizeof(consed_cstr_t);
-    uintptr_t scc_cstr_u = (uintptr_t)src_cstr;
-
     consed_cstr_t *new_ccstr = (consed_cstr_t *)malloc(sizeof(consed_cstr_t) + src_len_w_nul);
     assert(new_ccstr);
     new_ccstr->hash      = src_hash;
@@ -55,7 +52,7 @@ static inline void kConsedCstrPolicy_dtor(void *val) {
     uintptr_t cstr_u      = (uintptr_t)ccstrp->cstr;
     if (cstr_u != val_next_u) {
         // not a special contiguous layout
-        printf("!!! freeing non-contig consed_cstr_t: %p cstr: %p\n", ccstrp, ccstrp->cstr);
+        fprintf(stderr, "!!! freeing non-contig consed_cstr_t: %p cstr: %p\n", ccstrp, ccstrp->cstr);
         free((void *)ccstrp->cstr);
     }
     free((void *)ccstrp);
@@ -143,7 +140,6 @@ static inline consed_cstr_t *make_consd_cstr(const char *cstr) {
 static inline icstr_t inter_string_to_set(ConsedCstrSet *set, const char *cstr) {
     assert(set);
     assert(cstr);
-    const char *interned_cstr = NULL;
     consed_cstr_t *ccstr      = NULL;
     ConsedCstrSet_Insert ins  = ConsedCstrSet_deferred_insert_by_cstr(set, cstr);
     consed_cstr_t **ccstrp    = ConsedCstrSet_Iter_get(&ins.iter);
