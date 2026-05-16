@@ -130,6 +130,10 @@ __attribute__((constructor)) static void init_string_interning_set(void) {
     global_string_interning_set = ConsedCstrSet_new(0);
 }
 
+__attribute__((destructor)) static void deinit_string_interning_set(void) {
+    ConsedCstrSet_destroy(&global_string_interning_set);
+}
+
 static inline icstr_t inter_string(const char *cstr) {
     return inter_string_to_set(&global_string_interning_set, cstr);
 }
