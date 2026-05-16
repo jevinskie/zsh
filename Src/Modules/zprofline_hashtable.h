@@ -134,7 +134,7 @@ static inline icstr_t inter_string(const char *cstr) {
     return inter_string_to_set(&global_string_interning_set, cstr);
 }
 
-__attribute__((constructor)) static void deinit_string_interning_set(void) {
+__attribute__((destructor)) static void deinit_string_interning_set(void) {
     ConsedCstrSet_destroy(&global_string_interning_set);
 }
 
@@ -221,7 +221,7 @@ __attribute__((constructor)) static void init_funcstat_set(void) {
     global_funcstat_set = FuncstatSet_new(0);
 }
 
-__attribute__((constructor)) static void deinit_funcstat_set(void) {
+__attribute__((destructor)) static void deinit_funcstat_set(void) {
     FuncstatSet_destroy(&global_funcstat_set);
 }
 
@@ -233,8 +233,8 @@ static inline size_t FuncstatSet_cstr_hash(const char *self) {
     return state;
 }
 
-static inline bool FuncstatSet_cstr_eq(const char *self, consed_cstr_t *const *that) {
-    return !strcmp(self, (*that)->cstr);
+static inline bool FuncstatSet_cstr_eq(const char *self, funcstat_t *const *that) {
+    return !strcmp(self, (*that)->filename);
 }
 
 CWISS_DECLARE_LOOKUP_NAMED(FuncstatSet, cstr, char);
