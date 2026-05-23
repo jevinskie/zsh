@@ -11,127 +11,126 @@ typedef const char *icstr_t;
 
 struct consed_cstr_s {
     size_t hash;
-    size_t len_w_nul;
-    icstr_t cstr;
+    size_t sz;
 };
 
-typedef struct consed_cstr_s consed_cstr_t;
+typedef struct consed_cstr_s consed_buf_t;
 
-static inline void kConsedCstrPolicy_copy(void *dst, const void *src) {
-    consed_cstr_t **dccp = (consed_cstr_t **)dst;
-    consed_cstr_t **sccp = (consed_cstr_t **)src;
+static inline const char *consed_buf_get_buf(const consed_buf_t *consed_str) {
+    return (const char *)consed_str + sizeof(*consed_str);
+}
+
+static inline size_t consed_buf_get_buf_sz(const consed_buf_t *consed_str) {
+    return consed_str->sz;
+}
+
+static inline size_t consed_cstr_get_sz(const consed_buf_t *consed_str) {
+    return  consed_buf_get_buf_sz(consed_str) + sizeof(*consed_str);
+}
+
+static inline void kConsedBufPolicy_copy(void *dst, const void *src) {
+    consed_buf_t **dccp = (consed_buf_t **)dst;
+    const consed_buf_t **sccp = (consed_buf_t **)src;
     const size_t src_hash      = (*sccp)->hash;
-    const size_t src_len_w_nul = (*sccp)->len_w_nul;
-    const char *src_cstr       = (*sccp)->cstr;
+    const size_t src_sz = (*sccp)->sz;
+    const char *src_cstr       = consed_cstr_get(*sccp);
 
-    consed_cstr_t *new_ccstr = malloc(sizeof(consed_cstr_t) + src_len_w_nul);
+    consed_buf_t *new_ccstr = malloc(sizeof(consed_buf_t) + src_sz);
     if (!new_ccstr) {
-        assert(!"malloc failure");
+        assert(!"malloc failed in kConsedBufPolicy_copy");
+        abort();
     }
     new_ccstr->hash      = src_hash;
-    new_ccstr->len_w_nul = src_len_w_nul;
-    char *new_cstr       = (char *)((uintptr_t)new_ccstr + sizeof(consed_cstr_t));
-    memcpy(new_cstr, src_cstr, src_len_w_nul);
-    new_ccstr->cstr = new_cstr;
+    new_ccstr->sz = src_sz;
+    char *new_cstr       = (char *)new_ccstr + sizeof(consed_buf_t);
+    memcpy(new_cstr, src_cstr, src_sz);
     *dccp           = new_ccstr;
 }
 
-static inline void kConsedCstrPolicy_dtor(void *val) {
-    consed_cstr_t *ccstr = *(consed_cstr_t **)val;
+static inline void kConsedBufPolicy_dtor(void *val) {
+    consed_buf_t *ccstr = *(consed_buf_t **)val;
     free(ccstr);
 }
 
-static inline size_t kConsedCstrPolicy_hash(const void *val) {
-    consed_cstr_t *ccstr = *(consed_cstr_t **)val;
-    if (ccstr->hash != CWISS_AbslHash_kInit) {
+static inline size_t kConsedBufPolicy_hash(const void *val) {
+    consed_buf_t *ccstr = *(consed_buf_t **)val;
+    if (ccstr->hash != CWISS_FxHash_kInit) {
         return ccstr->hash;
     }
-    CWISS_FxHash_State state = CWISS_AbslHash_kInit;
-    CWISS_FxHash_Write(&state, &ccstr->len_w_nul, sizeof(ccstr->len_w_nul));
-    CWISS_FxHash_Write(&state, ccstr->cstr, ccstr->len_w_nul);
-    CWISS_FxHash_Finish(&state);
+    CWISS_FxHash_State state = CWISS_FxHash_kInit;
+    CWISS_FxHash_Write(&state, &ccstr->sz, sizeof(ccstr->sz));
+    CWISS_FxHash_Write(&state, consed_buf_get_buf(ccstr), ccstr->sz);
     ccstr->hash = CWISS_FxHash_Finish(&state);;
     return ccstr->hash;
 }
 
-static inline bool kConsedCstrPolicy_eq(const void *a, const void *b) {
-    consed_cstr_t **acc = (consed_cstr_t **)a;
-    consed_cstr_t **bcc = (consed_cstr_t **)b;
-    if (*acc == *bcc) {
-        return true;
-    }
-    if ((*acc)->hash != (*bcc)->hash) {
+static inline bool kConsedBufPolicy_eq(const void *a, const void *b) {
+    consed_buf_t *acc = *(consed_buf_t **)a;
+    consed_buf_t *bcc = *(consed_buf_t **)b;
+    if (acc->hash != bcc->hash || acc->sz != bcc->sz) {
         return false;
     }
-    if ((*acc)->len_w_nul != (*bcc)->len_w_nul) {
-        return false;
-    }
-    int memcmp_res = memcmp((*acc)->cstr, (*bcc)->cstr, (*acc)->len_w_nul);
-    if (!memcmp_res) {
-        return true;
-    } else {
-        return false;
-    }
+    return !!memcmp(consed_buf_get_buf(acc), consed_buf_get_buf(bcc), acc->sz);
 }
 
-CWISS_DECLARE_NODE_SET_POLICY(kConsedCstrPolicy, consed_cstr_t *,
-                              (obj_copy, kConsedCstrPolicy_copy),
-                              (obj_dtor, kConsedCstrPolicy_dtor),
-                              (key_hash, kConsedCstrPolicy_hash), (key_eq, kConsedCstrPolicy_eq));
+CWISS_DECLARE_NODE_SET_POLICY(kConsedBufPolicy, consed_buf_t *,
+                              (obj_copy, kConsedBufPolicy_copy),
+                              (obj_dtor, kConsedBufPolicy_dtor),
+                              (key_hash, kConsedBufPolicy_hash), (key_eq, kConsedBufPolicy_eq));
 
-CWISS_DECLARE_HASHSET_WITH(ConsedCstrSet, consed_cstr_t *, kConsedCstrPolicy);
+CWISS_DECLARE_HASHSET_WITH(ConsedBufSet, consed_buf_t *, kConsedBufPolicy);
 
-static inline size_t ConsedCstrSet_cstr_hash(const char *self) {
-    CWISS_FxHash_State state = CWISS_AbslHash_kInit;
-    const size_t len_w_nul   = strlen(self) + 1;
-    CWISS_FxHash_Write(&state, &len_w_nul, sizeof(len_w_nul));
-    CWISS_FxHash_Write(&state, self, len_w_nul - 1);
+static inline size_t ConsedBufSet_cstr_hash(const char *self) {
+    CWISS_FxHash_State state = CWISS_FxHash_kInit;
+    const size_t sz   = strlen(self) + 1;
+    CWISS_FxHash_Write(&state, &sz, sizeof(sz));
+    CWISS_FxHash_Write(&state, self, sz);
     return CWISS_FxHash_Finish(&state);
 }
 
-static inline bool ConsedCstrSet_cstr_eq(const char *self, consed_cstr_t *const *that) {
-    return !strcmp(self, (*that)->cstr);
+static inline bool ConsedBufSet_cstr_eq(const char *self, consed_buf_t *const *that) {
+    return !strcmp(self, consed_buf_get_buf(*that));
 }
 
-CWISS_DECLARE_LOOKUP_NAMED(ConsedCstrSet, cstr, char);
+CWISS_DECLARE_LOOKUP_NAMED(ConsedBufSet, cstr, char);
 
-static inline consed_cstr_t *make_consd_cstr(const char *cstr) {
-    const size_t len      = strlen(cstr);
-    consed_cstr_t *ccstrp = malloc(sizeof(consed_cstr_t) + len + 1);
-    ccstrp->len_w_nul = len + 1;
-    char *cstr_copy   = (char *)((uintptr_t)ccstrp + sizeof(consed_cstr_t));
-    memcpy(cstr_copy, cstr, len + 1);
-    ccstrp->cstr = cstr_copy;
-    ccstrp->hash = CWISS_AbslHash_kInit;
-    kConsedCstrPolicy_hash(&ccstrp);
-    return ccstrp;
+static inline consed_buf_t *make_consd_cstr(const char *cstr) {
+    const size_t sz      = strlen(cstr) + 1;
+    consed_buf_t *cbufp = malloc(sizeof(consed_buf_t) + sz);
+    cbufp->sz = sz;
+    char *cstr_copy   = (char *)cbufp + sizeof(consed_buf_t);
+    memcpy(cstr_copy, cstr, sz);
+    cbufp->hash = CWISS_FxHash_kInit;
+    kConsedBufPolicy_hash(&cbufp);
+    return cbufp;
 }
 
-static inline icstr_t inter_string_to_set(ConsedCstrSet *set, const char *cstr) {
+static inline icstr_t inter_string_to_set(ConsedBufSet *set, const char *cstr) {
     const char *interned_cstr = NULL;
-    consed_cstr_t *ccstr      = NULL;
-    ConsedCstrSet_Insert ins  = ConsedCstrSet_deferred_insert_by_cstr(set, cstr);
-    consed_cstr_t **ccstrp    = ConsedCstrSet_Iter_get(&ins.iter);
+    consed_buf_t *cbufp      = NULL;
+    ConsedBufSet_Insert ins  = ConsedBufSet_deferred_insert_by_cstr(set, cstr);
+    consed_buf_t **cbufpp    = ConsedBufSet_Iter_get(&ins.iter);
     if (ins.inserted) {
-        ccstr                  = make_consd_cstr(cstr);
-        const size_t len_w_nul = strlen(cstr) + 1;
-        memcpy((char *)ccstr->cstr, cstr, len_w_nul);
-        ccstr->hash = ConsedCstrSet_cstr_hash(ccstr->cstr);
-        *ccstrp     = ccstr;
+        cbufp                  = make_consd_cstr(cstr);
+        const size_t sz = strlen(cstr) + 1;
+        memcpy(consed_buf_get_buf(cbufp), cstr, sz);
+        cbufp->hash = CWISS_FxHash_kInit;
+        kConsedBufPolicy_hash(&cbufp);
+        *cbufpp     = cbufp;
     } else {
-        ccstr = *ccstrp;
+        cbufp = *cbufpp;
     }
-    return ccstr->cstr;
+    return consed_buf_get_buf(cbufp);
 }
 
-extern ConsedCstrSet global_string_interning_set;
+extern ConsedBufSet global_string_interning_set;
 
 __attribute__((constructor)) static void init_string_interning_set(void) {
-    global_string_interning_set = ConsedCstrSet_new(0);
+    global_string_interning_set = ConsedBufSet_new(0);
 }
 
 __attribute__((destructor)) static void deinit_string_interning_set(void) {
-    ConsedCstrSet_destroy(&global_string_interning_set);
+    ConsedBufSet_destroy(&global_string_interning_set);
 }
 
 static inline icstr_t inter_string(const char *cstr) {
